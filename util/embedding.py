@@ -37,7 +37,10 @@ class BaseEmbedding:
         self.word_dict[token] = len(self.word_dict)
         self.vector = torch.cat([self.vector, vector], dim=0)
 
-    def load_embedding(self, embedding_path, tokens):
+    def get_embedding(self, token):
+        return self.vector[self.word_dict[token]].tolist()
+
+    def load_embedding(self, tokens):
         tokens = set(tokens)
         vectors = []
 

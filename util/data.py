@@ -7,6 +7,10 @@ import pandas as pd
 from tqdm import tqdm
 import torch
 
+# self-made module
+from util import tokenizer as tkn
+from util import embedding as emb
+
 def preprocessing(data):
     # encoding normalize
     data = [[unicodedata.normalize('NFKC', str(column))
@@ -52,7 +56,7 @@ def load_dataset_semeval2016(split='train'):
     # convert to dataframe
     data_df = convert_to_dataframe(data)
 
-    return data_df  # target, claim, stance
+    return data_df
 
 def load_dataset(dataset=None):
     # load dataset by passed parameter
@@ -134,3 +138,56 @@ def load_lexicon(lexicon=None):
 #                                                   padding_value=0.0)
 
 #         return task_id, x1, x2, lexicon, y
+
+class Dataset(torch.utils.data.Dataset):
+    def __init__(self, tokenizer: tkn.BaseTokenizer,
+                 embedding: emb.BaseEmbedding,
+                 target, target_encode, claim_encode, claim_lexicon,
+                 stance_encode, sentiment_encode):
+        self.target_name = target.reset_index(drop=True)
+        self.target = target_encode
+        self.claim = [torch.LongTensor(ids) for ids in claim_encode]
+        self.lexicon = [torch.FloatTensor(ids) for ids in claim_lexicon]
+        self.stance = torch.LongTensor([label for label in stance_encode])
+        self.sentiment = torch.LongTensor([label for label in sentiment_encode])
+
+        # get target mean embedding first
+        target_token = tokenizer.convert_ids_to_tokens(
+            target_encode.tolist())
+        target_embeddings = [[embedding.get_embedding(token)
+                              for token in tokens]
+                             for tokens in target_token]
+        target_embeddings = [torch.mean(torch.Tensor(embedding), dim=0).tolist()
+                             for embedding in target_embeddings]
+
+        self.target = target_embeddings
+    
+    def __len__(self):
+        return len(self.target)
+
+    def __getitem__(self, index):
+        return (self.target_name[index],
+                self.target[index], self.claim[index],
+                self.lexicon[index],
+                self.stance[index], self.sentiment[index])
+
+    @staticmethod
+    def collate_fn(batch):
+        target_name = [data[0] for data in batch]
+        target = torch.FloatTensor([data[1] for data in batch])
+        claim = [data[2] for data in batch]
+        lexicon = [data[3] for data in batch]
+        stance = torch.LongTensor([data[4] for data in batch])
+        sentiment = torch.LongTensor([data[5] for data in batch])
+
+        # pad claim to fixed length with value 0
+        claim = torch.nn.utils.rnn.pad_sequence(claim,
+                                                batch_first=True,
+                                                padding_value=0)
+
+        # pad lexicon to fixed length with value 0.0
+        lexicon = torch.nn.utils.rnn.pad_sequence(lexicon,
+                                                  batch_first=True,
+                                                  padding_value=0.0)
+
+        return target_name, target, claim, lexicon, stance, sentiment

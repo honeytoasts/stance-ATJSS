@@ -3,11 +3,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-# self-made module
-from util import config
-
 class BaseModel(torch.nn.Module):
-    def __init__(self, config: config.BaseConfig, num_embeddings,
+    def __init__(self, config, num_embeddings,
                  padding_idx, embedding_weight=None):
         super(BaseModel, self).__init__()
 
@@ -51,7 +48,7 @@ class BaseModel(torch.nn.Module):
         return stance_r, sentiment_r, stance_weight, sentiment_weight
 
 class StanceAttn(torch.nn.Module):
-    def __init__(self, config: config.BaseConfig):
+    def __init__(self, config):
         super(StanceAttn, self).__init__()
 
         # config
@@ -111,7 +108,7 @@ class StanceAttn(torch.nn.Module):
         return r, weight
 
 class SentimentAttn(torch.nn.Module):
-    def __init__(self, config: config.BaseConfig):
+    def __init__(self, config):
         super(SentimentAttn, self).__init__()
 
         # config
@@ -165,7 +162,7 @@ class SentimentAttn(torch.nn.Module):
         return r, weight
 
 class StanceLinear(torch.nn.Module):
-    def __init__(self, config: config.BaseConfig):
+    def __init__(self, config):
         super(StanceLinear, self).__init__()
 
         # config
@@ -193,7 +190,7 @@ class StanceLinear(torch.nn.Module):
         return stance_r
 
 class SentimentLinear(torch.nn.Module):
-    def __init__(self, config: config.BaseConfig):
+    def __init__(self, config):
         super(SentimentLinear, self).__init__()
 
         # config
