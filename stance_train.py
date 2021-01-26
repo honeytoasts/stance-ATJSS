@@ -11,10 +11,12 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
-import tensorboard
 
 # self-made module
 import util
+
+# prevent warning
+pd.options.mode.chained_assignment = None
 
 def main():
     # get config from command line
@@ -41,7 +43,6 @@ def main():
     random.seed(config.random_seed)
     np.random.seed(config.random_seed)
     torch.manual_seed(config.random_seed)
-    torch.set_deterministic(True)
 
     if torch.cuda.is_available():
         torch.cuda.manual_seed(config.random_seed)
@@ -70,8 +71,8 @@ def main():
     all_sentence = []
     all_sentence.extend(train_df['target'].drop_duplicates().tolist())
     all_sentence.extend(train_df['claim'].drop_duplicates().tolist())
-    # all_sentence.extend(valid_df['target'].drop_duplicates().tolist())
-    # all_sentence.extend(valid_df['claim'].drop_duplicates().tolist())
+    all_sentence.extend(valid_df['target'].drop_duplicates().tolist())
+    all_sentence.extend(valid_df['claim'].drop_duplicates().tolist())
 
     all_tokens = tokenizer.get_all_tokens(all_sentence)
     embedding.load_embedding(all_tokens)
@@ -182,7 +183,7 @@ def main():
         print('\n')
         model.train()
         train_iterator = tqdm(train_dataloader, total=len(train_dataloader),
-                            desc=f'epoch {epoch}', position=0)
+                              desc=f'epoch {epoch}', position=0)
 
         for _, train_target, train_claim, train_lexicon, \
             train_stance, train_sentiment in train_iterator:
@@ -227,51 +228,109 @@ def main():
             if float(config.lr_decay) != 1:
                 scheduler.step()
 
-    # evaluate model
-    train_iterator = tqdm(train_dataloader, total=len(train_dataloader),
-                          desc='evaluate training data', position=0)
-    (train_total_loss, train_stance_loss,
-     train_sentiment_loss, train_lexicon_loss,
-     train_target_f1, train_macro_f1,
-     train_micro_f1, train_sentiment_f1) = \
-         util.evaluate.evaluate_function(device=device,
-                                         model=model,
-                                         config=config,
-                                         batch_iterator=train_iterator)
+        # evaluate model
+        train_iterator = tqdm(train_dataloader, total=len(train_dataloader),
+                              desc='evaluate training data', position=0)
+        (train_total_loss, train_stance_loss,
+         train_sentiment_loss, train_lexicon_loss,
+         train_target_f1, train_macro_f1,
+         train_micro_f1, train_sentiment_f1) = \
+            util.evaluate.evaluate_function(device=device,
+                                            model=model,
+                                            config=config,
+                                            batch_iterator=train_iterator)
 
-    valid_iterator = tqdm(valid_dataloader, total=len(valid_dataloader),
-                          desc='evaluate validation data', position=0)
-    (valid_total_loss, valid_stance_loss,
-     valid_sentiment_loss, valid_lexicon_loss,
-     valid_target_f1, valid_macro_f1,
-     valid_micro_f1, valid_sentiment_f1) = \
-         util.evaluate.evaluate_function(device=device,
-                                         model=model,
-                                         config=config,
-                                         batch_iterator=valid_iterator)
+        valid_iterator = tqdm(valid_dataloader, total=len(valid_dataloader),
+                              desc='evaluate validation data', position=0)
+        (valid_total_loss, valid_stance_loss,
+         valid_sentiment_loss, valid_lexicon_loss,
+         valid_target_f1, valid_macro_f1,
+         valid_micro_f1, valid_sentiment_f1) = \
+            util.evaluate.evaluate_function(device=device,
+                                            model=model,
+                                            config=config,
+                                            batch_iterator=valid_iterator)
 
-    # print loss and score
-    print(f'train total loss: {round(train_total_loss, 5)}, '
-          f'train stance loss: {round(train_stance_loss, 5)}, '
-          f'train lexicon loss: {round(train_lexicon_loss, 5)}\n'
-          f'train micro f1: {round(train_micro_f1, 5)}, '
-          f'train macro f1: {round(train_macro_f1, 5)}\n'
-          f'valid total loss: {round(valid_total_loss, 5)}, '
-          f'valid stance loss: {round(valid_stance_loss, 5)}, '
-          f'valid lexicon loss: {round(valid_lexicon_loss, 5)}\n'
-          f'valid micro f1: {round(valid_micro_f1, 5)}, '
-          f'valid macro f1: {round(valid_macro_f1, 5)}')
+        # print loss and score
+        print(f'train total loss: {round(train_total_loss, 5)}, '
+              f'train stance loss: {round(train_stance_loss, 5)}, '
+              f'train lexicon loss: {round(train_lexicon_loss, 5)}\n'
+              f'train macro f1: {round(train_macro_f1, 5)}, '
+              f'train micro f1: {round(train_micro_f1, 5)}\n'
+              f'valid total loss: {round(valid_total_loss, 5)}, '
+              f'valid stance loss: {round(valid_stance_loss, 5)}, '
+              f'valid lexicon loss: {round(valid_lexicon_loss, 5)}\n'
+              f'valid macro f1: {round(valid_macro_f1, 5)}, '
+              f'valid micro f1: {round(valid_micro_f1, 5)}')
 
-    if (best_valid_loss is None) or \
-        (valid_stance_loss < best_valid_loss) or \
-        (valid_micro_f1 > best_valid_f1):
-        best_train_loss = train_total_loss
-        best_train_f1 = train_micro_f1
-        best_valid_loss = valid_total_loss
-        best_valid_f1 = valid_micro_f1
-        best_epoch = epoch
+        if (best_valid_loss is None) or \
+            (valid_stance_loss < best_valid_loss) or \
+            (valid_micro_f1 > best_valid_f1):
+            best_train_loss = train_total_loss
+            best_train_f1 = train_micro_f1
+            best_valid_loss = valid_total_loss
+            best_valid_f1 = valid_micro_f1
+            best_epoch = epoch
 
-    # save model
-    torch.save(model.state_dict(), f'{save_path}/model_{epoch}.ckpt')
+        # save model
+        torch.save(model.state_dict(), f'{save_path}/model_{epoch}.ckpt')
 
-    # write loss and f1 to tensorboard
+        # write loss and f1 to tensorboard
+        writer.add_scalar('Loss/train_total', train_total_loss, epoch)
+        writer.add_scalar('Loss/train_stance', train_stance_loss, epoch)
+        writer.add_scalar('Loss/train_sentiment', train_sentiment_loss, epoch)
+        writer.add_scalar('Loss/train_lexicon', train_lexicon_loss, epoch)
+
+        writer.add_scalar('Loss/valid_total', valid_total_loss, epoch)
+        writer.add_scalar('Loss/valid_stance', valid_stance_loss, epoch)
+        writer.add_scalar('Loss/valid_sentiment', valid_sentiment_loss, epoch)
+        writer.add_scalar('Loss/valid_lexicon', valid_lexicon_loss, epoch)
+
+        writer.add_scalar('F1/train_macro', train_macro_f1, epoch)
+        writer.add_scalar('F1/train_micro', train_micro_f1, epoch)
+        writer.add_scalar('F1/train_sentiment', train_sentiment_f1, epoch)
+
+        writer.add_scalar('F1/valid_macro', valid_macro_f1, epoch)
+        writer.add_scalar('F1/valid_micro', valid_micro_f1, epoch)
+        writer.add_scalar('F1/valid_sentiment', valid_sentiment_f1, epoch)
+
+        writer.add_scalars('F1/train_target',
+                           {'atheism': train_target_f1[0],
+                            'climate': train_target_f1[1],
+                            'feminist': train_target_f1[2],
+                            'hillary': train_target_f1[3],
+                            'abortion': train_target_f1[4]}, epoch)
+        writer.add_scalars('F1/valid_target',
+                           {'atheism': valid_target_f1[0],
+                            'climate': valid_target_f1[1],
+                            'feminist': valid_target_f1[2],
+                            'hillary': valid_target_f1[3],
+                            'abortion': valid_target_f1[4]}, epoch)
+
+    # print final result
+    print(f'\nexperiment {config.experiment_no}: epoch {best_epoch}\n'
+          f'best train total loss : {best_train_loss}, '
+          f'best train stance loss: {best_valid_loss}\n'
+          f'best train stance f1  : {best_train_f1}, '
+          f'best valid stance f1  : {best_valid_f1}')
+
+    # add hyperparameters and final result to tensorboard
+    writer.add_hparams({
+        'epoch': best_epoch,
+        'train_loss': best_train_loss,
+        'valid_loss': best_valid_loss,
+        'train_f1': best_train_f1,
+        'valid_f1': best_valid_f1
+    }, metric_dict={})
+    writer.add_hparams(
+        {key: str(value) for key, value in config.__dict__.items()},
+        metric_dict={})
+    writer.close()
+
+    # release GPU memory
+    torch.cuda.empty_cache()
+
+    return
+
+if __name__ == '__main__':
+    main()

@@ -6,7 +6,6 @@ import json
 def parse_args():
     # construct argparser
     parser = argparse.ArgumentParser(
-        prog='stance_train.py',
         description='Train the AT-JSS-Lex model'
     )
 

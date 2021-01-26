@@ -1,5 +1,4 @@
 from util import config
-from util import config_old
 from util import data
 from util import tokenizer
 from util import embedding

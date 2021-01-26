@@ -74,5 +74,5 @@ def evaluate_function(device, model, config, batch_iterator):
 
     return (total_loss.item(), stance_loss.item(),
             sentiment_loss.item(), lexicon_loss.item(),
-            target_f1.item(), macro_f1.item(),
+            target_f1, macro_f1.item(),
             micro_f1.item(), sentiment_f1.item())

@@ -45,6 +45,9 @@ def load_dataset_semeval2016(split='train'):
     # remove data which target is "Donald Trump"
     df = df[df['Target'] != 'Donald Trump']
 
+    # only reserve the data which target is "Atheism"
+    # df = df[df['Target'] == 'Atheism']
+
     # get necessary column
     data = []
     for _, row in df.iterrows():
@@ -97,47 +100,6 @@ def load_lexicon(lexicon=None):
         return load_lexicon_emolex(types='sentiment')
 
     raise ValueError(f'lexicon {lexicon} does not support')
-
-# class SingleTaskDataset(torch.utils.data.Dataset):
-#     def __init__(self, task_id,
-#                  target_encode, claim_encode,
-#                  claim_lexicon, label_encode):
-#         # 0 for stance detection and 1 for NLI
-#         self.task_id = task_id
-#         self.x1 = [torch.LongTensor(ids) for ids in target_encode]
-#         self.x2 = [torch.LongTensor(ids) for ids in claim_encode]
-#         self.lexicon = [torch.FloatTensor(ids) for ids in claim_lexicon]
-#         self.y = torch.LongTensor([label for label in label_encode])
-
-#     def __len__(self):
-#         return len(self.x1)
-
-#     def __getitem__(self, index):
-#         return (self.task_id, self.x1[index], self.x2[index],
-#                 self.lexicon[index], self.y[index])
-
-#     @staticmethod
-#     def collate_fn(batch, pad_token_id=0):
-#         task_id = batch[0][0]
-#         x1 = [data[1] for data in batch]
-#         x2 = [data[2] for data in batch]
-#         lexicon = [data[3] for data in batch]
-#         y = torch.LongTensor([data[4] for data in batch])
-
-#         # pad sequence to fixed length with pad_token_id
-#         x1 = torch.nn.utils.rnn.pad_sequence(x1,
-#                                              batch_first=True,
-#                                              padding_value=pad_token_id)
-#         x2 = torch.nn.utils.rnn.pad_sequence(x2,
-#                                              batch_first=True,
-#                                              padding_value=pad_token_id)
-
-#         # pad lexicon to fixed length with value "0.0"
-#         lexicon = torch.nn.utils.rnn.pad_sequence(lexicon,
-#                                                   batch_first=True,
-#                                                   padding_value=0.0)
-
-#         return task_id, x1, x2, lexicon, y
 
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, tokenizer: tkn.BaseTokenizer,

@@ -31,6 +31,9 @@ class BaseModel(torch.nn.Module):
         self.sentiment_linear = SentimentLinear(config)
 
     def forward(self, batch_target, batch_claim):
+        # embedding layer
+        batch_claim = self.embedding_layer(batch_claim)
+
         # stance attn
         stance_r, stance_weight = self.stance_attn(batch_target, batch_claim)
 
@@ -67,17 +70,17 @@ class StanceAttn(torch.nn.Module):
 
         # linear layer for W_t t + b_t
         self.t_linear = nn.Linear(in_features=config.embedding_dim,
-                                  out_features=config.hidden_dim,
+                                  out_features=2*config.hidden_dim,
                                   bias=True)
 
         # linear layer for W_i' h_i
-        self.h_linear = nn.Linear(in_features=config.hidden_dim,
-                                  out_features=config.hidden_dim,
+        self.h_linear = nn.Linear(in_features=2*config.hidden_dim,
+                                  out_features=2*config.hidden_dim,
                                   bias=False)
 
     def forward(self, batch_target, batch_claim):
         # get all hidden vector
-        claim_ht = self.LSTM(batch_claim)  # (B, S, H)
+        claim_ht, _ = self.LSTM(batch_claim)  # (B, S, H)
 
         # get final hidden vector
         final_claim_ht = claim_ht[:, -1]  # (B, H)
@@ -126,18 +129,18 @@ class SentimentAttn(torch.nn.Module):
         self.LSTM = nn.LSTM(**parameter)
 
         # linear layer for W_s s + b_s
-        self.s_linear = nn.Linear(in_features=config.hidden_dim,
-                                  out_features=config.hidden_dim,
+        self.s_linear = nn.Linear(in_features=2*config.hidden_dim,
+                                  out_features=2*config.hidden_dim,
                                   bias=True)
 
         # linear layer for W_i h_i
-        self.h_linear = nn.Linear(in_features=config.hidden_dim,
-                                  out_features=config.hidden_dim,
+        self.h_linear = nn.Linear(in_features=2*config.hidden_dim,
+                                  out_features=2*config.hidden_dim,
                                   bias=False)
 
     def forward(self, batch_claim):
         # get all hidden vector
-        claim_ht = self.LSTM(batch_claim)  # (B, S, H)
+        claim_ht, _ = self.LSTM(batch_claim)  # (B, S, H)
 
         # get final hidden vector
         final_claim_ht = claim_ht[:, -1]  # (B, H)
