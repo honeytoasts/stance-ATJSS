@@ -272,8 +272,8 @@ def main():
             best_valid_f1 = valid_micro_f1
             best_epoch = epoch
 
-        # save model
-        torch.save(model.state_dict(), f'{save_path}/model_{epoch}.ckpt')
+            # save model
+            torch.save(model.state_dict(), f'{save_path}/model_{epoch}.ckpt')
 
         # write loss and f1 to tensorboard
         writer.add_scalar('Loss/train_total', train_total_loss, epoch)
