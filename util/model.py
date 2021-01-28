@@ -79,28 +79,31 @@ class StanceAttn(torch.nn.Module):
                                   bias=False)
 
     def forward(self, batch_target, batch_claim):
+        # get batch sequence length
+        seq_len = batch_claim.shape[1]
+
         # get all hidden vector
         claim_ht, _ = self.LSTM(batch_claim)  # (B, S, H)
 
         # get final hidden vector
         final_claim_ht = claim_ht[:, -1]  # (B, H)
         final_claim_ht = final_claim_ht.repeat_interleave(
-            self.config.max_seq_len, 0)  # (BxS, H)
+            seq_len, 0)  # (BxS, H)
         final_claim_ht = final_claim_ht.reshape(
-            -1, self.config.max_seq_len, final_claim_ht.shape[1])  # (B, S, H)
+            -1, seq_len, final_claim_ht.shape[1])  # (B, S, H)
 
         # get target embedding
         target_embedding = batch_target.repeat_interleave(
-            self.config.max_seq_len, 0)  # (BxS, H)
+            seq_len, 0)  # (BxS, H)
         target_embedding = target_embedding.reshape(
-            -1, self.config.max_seq_len, target_embedding.shape[1])  # (B, S, H)
+            -1, seq_len, target_embedding.shape[1])  # (B, S, H)
 
         # get attention vector e
         e = torch.tanh(self.t_linear(target_embedding) + \
                        self.h_linear(claim_ht))  # (B, S, H)
         e = torch.matmul(final_claim_ht.unsqueeze(3).transpose(2, 3),
                          e.unsqueeze(3))  # (B, S, 1, 1)
-        e = e.reshape(-1, self.config.max_seq_len)  # (B, S)
+        e = e.reshape(-1, seq_len)  # (B, S)
 
         # apply softmax to get attention score
         weight = torch.softmax(e, dim=1)  # (B, S)
@@ -139,22 +142,25 @@ class SentimentAttn(torch.nn.Module):
                                   bias=False)
 
     def forward(self, batch_claim):
+        # get batch sequence length
+        seq_len = batch_claim.shape[1]
+
         # get all hidden vector
         claim_ht, _ = self.LSTM(batch_claim)  # (B, S, H)
 
         # get final hidden vector
         final_claim_ht = claim_ht[:, -1]  # (B, H)
         final_claim_ht = final_claim_ht.repeat_interleave(
-            self.config.max_seq_len, 0)  # (BxS, H)
+            seq_len, 0)  # (BxS, H)
         final_claim_ht = final_claim_ht.reshape(
-            -1, self.config.max_seq_len, final_claim_ht.shape[1])  # (B, S, H)
+            -1, seq_len, final_claim_ht.shape[1])  # (B, S, H)
 
         # get attention vector e
         e = torch.tanh(self.s_linear(final_claim_ht) + \
                        self.h_linear(claim_ht))  # (B, S, H)
         e = torch.matmul(final_claim_ht.unsqueeze(3).transpose(2, 3),
                          e.unsqueeze(3))  # (B, S, 1, 1)
-        e = e.reshape(-1, self.config.max_seq_len)  # (B, S)
+        e = e.reshape(-1, seq_len)  # (B, S)
 
         # apply softmax to get attention score
         weight = torch.softmax(e, dim=1)  # (B, S)
@@ -176,10 +182,12 @@ class StanceLinear(torch.nn.Module):
                             out_features=config.stance_linear_dim)]
 
         for _ in range(config.num_linear_layers-2):
+            linear.append(nn.ReLU())
             linear.append(nn.Dropout(config.linear_dropout))
             linear.append(nn.Linear(in_features=config.stance_linear_dim,
                                     out_features=config.stance_linear_dim))
 
+        linear.append(nn.ReLU())
         linear.append(nn.Dropout(config.linear_dropout))
         linear.append(nn.Linear(in_features=config.stance_linear_dim,
                                 out_features=config.stance_output_dim))
@@ -204,10 +212,12 @@ class SentimentLinear(torch.nn.Module):
                             out_features=config.sentiment_linear_dim)]
 
         for _ in range(config.num_linear_layers-2):
+            linear.append(nn.ReLU())
             linear.append(nn.Dropout(config.linear_dropout))
             linear.append(nn.Linear(in_features=config.sentiment_linear_dim,
                                     out_features=config.sentiment_linear_dim))
 
+        linear.append(nn.ReLU())
         linear.append(nn.Dropout(config.linear_dropout))
         linear.append(nn.Linear(in_features=config.sentiment_linear_dim,
                                 out_features=config.sentiment_output_dim))

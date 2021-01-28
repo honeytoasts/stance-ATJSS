@@ -64,7 +64,7 @@ def main():
     data_df['target_encode'] = \
         tokenizer.encode(data_df['target'].tolist(), padding=False)
     data_df['claim_encode'] = \
-        tokenizer.encode(data_df['claim'].tolist(), padding=True)
+        tokenizer.encode(data_df['claim'].tolist(), padding=False)
 
     # label encode
     stance_label = {'favor': 0, 'against': 1, 'none': 2}

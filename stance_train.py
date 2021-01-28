@@ -84,11 +84,11 @@ def main():
     train_df['target_encode'] = \
         tokenizer.encode(train_df['target'].tolist(), padding=False)
     train_df['claim_encode'] = \
-        tokenizer.encode(train_df['claim'].tolist(), padding=True)
+        tokenizer.encode(train_df['claim'].tolist(), padding=False)
     valid_df['target_encode'] = \
         tokenizer.encode(valid_df['target'].tolist(), padding=False)
     valid_df['claim_encode'] = \
-        tokenizer.encode(valid_df['claim'].tolist(), padding=True)
+        tokenizer.encode(valid_df['claim'].tolist(), padding=False)
 
     # label encode
     stance_label = {'favor': 0, 'against': 1, 'none': 2}
