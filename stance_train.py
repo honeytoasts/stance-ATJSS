@@ -264,7 +264,7 @@ def main():
               f'valid micro f1: {round(valid_micro_f1, 5)}')
 
         if (best_valid_loss is None) or \
-            (valid_stance_loss < best_valid_loss) or \
+            (valid_total_loss < best_valid_loss) or \
             (valid_micro_f1 > best_valid_f1):
             best_train_loss = train_total_loss
             best_train_f1 = train_micro_f1
