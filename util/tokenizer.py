@@ -240,4 +240,4 @@ class TweetTokenizer(BaseTokenizer):
         # filter stopwords
         sentences = self.filter_stopwords(sentences)
 
-        return sentences 
+        return sentences

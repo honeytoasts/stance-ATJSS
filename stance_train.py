@@ -26,8 +26,8 @@ def main():
     save_path = f'model/{config.experiment_no}'
     if not os.path.exists(save_path):
         os.makedirs(save_path)
-    else:
-        raise FileExistsError(f'experiment {config.experiment_no} have already exist')
+    # else:
+    #     raise FileExistsError(f'experiment {config.experiment_no} have already exist')
 
     # save config
     util.config.save(config, f'{save_path}/config.json')
@@ -69,10 +69,10 @@ def main():
 
     # get all tokens and word embeddings
     all_sentence = []
-    all_sentence.extend(train_df['target'].drop_duplicates().tolist())
-    all_sentence.extend(train_df['claim'].drop_duplicates().tolist())
-    all_sentence.extend(valid_df['target'].drop_duplicates().tolist())
-    all_sentence.extend(valid_df['claim'].drop_duplicates().tolist())
+    all_sentence.extend(train_df['target'].tolist())
+    all_sentence.extend(train_df['claim'].tolist())
+    all_sentence.extend(valid_df['target'].tolist())
+    all_sentence.extend(valid_df['claim'].tolist())
 
     all_tokens = tokenizer.get_all_tokens(all_sentence)
     embedding.load_embedding(all_tokens)
@@ -84,11 +84,11 @@ def main():
     train_df['target_encode'] = \
         tokenizer.encode(train_df['target'].tolist(), padding=False)
     train_df['claim_encode'] = \
-        tokenizer.encode(train_df['claim'].tolist(), padding=False)
+        tokenizer.encode(train_df['claim'].tolist(), padding=True)
     valid_df['target_encode'] = \
         tokenizer.encode(valid_df['target'].tolist(), padding=False)
     valid_df['claim_encode'] = \
-        tokenizer.encode(valid_df['claim'].tolist(), padding=False)
+        tokenizer.encode(valid_df['claim'].tolist(), padding=True)
 
     # label encode
     stance_label = {'favor': 0, 'against': 1, 'none': 2}
@@ -140,7 +140,7 @@ def main():
     valid_dataset = util.data.Dataset(
         tokenizer=tokenizer,
         embedding=embedding,
-        target=train_df['target'],
+        target=valid_df['target'],
         target_encode=valid_df['target_encode'],
         claim_encode=valid_df['claim_encode'],
         claim_lexicon=valid_df['claim_lexicon'],
@@ -156,21 +156,41 @@ def main():
     valid_dataloader = DataLoader(
         dataset=valid_dataset,
         batch_size=config.batch_size,
-        shuffle=True,
+        shuffle=False,
         collate_fn=util.data.Dataset.collate_fn)
 
     # construct model, optimizer and scheduler
-    model = util.model.BaseModel(config=config,
+    model = util.model.BaseModel(device=device,
+                                 config=config,
                                  num_embeddings=embedding.get_num_embeddings(),
                                  padding_idx=tokenizer.pad_token_id,
                                  embedding_weight=embedding.vector)
     model = model.to(device)
 
-    optimizer = torch.optim.Adam(params=model.parameters(),
-                                 lr=config.learning_rate,
-                                 weight_decay=config.weight_decay)
+    # remove weight decay on bias and layer-norm
+    no_decay = ['bias', 'LayerNorm.weight']
+    optim_group_params = [
+        {
+            'params': [
+                param for name, param in model.named_parameters()
+                if not any(nd in name for nd in no_decay)
+            ],
+            'weight_decay': config.weight_decay,
+        },
+        {
+            'params': [
+                param for name, param in model.named_parameters()
+                if any(nd in name for nd in no_decay)
+            ],
+            'weight_decay': 0.0,
+        },
+    ]
 
-    if float(config.lr_decay) != 1:
+    optimizer = torch.optim.AdamW(params=optim_group_params,
+                                  lr=config.learning_rate,
+                                  eps=1e-8)
+
+    if float(config.lr_decay) != 1.0:
         scheduler = torch.optim.lr_scheduler.StepLR(
             optimizer=optimizer,
             step_size=config.lr_decay_step,
@@ -188,7 +208,7 @@ def main():
         for _, train_target, train_claim, train_lexicon, \
             train_stance, train_sentiment in train_iterator:
             # specify device for data
-            train_target = train_target.to(device)
+            # train_target = train_target.to(device)
             train_claim = train_claim.to(device)
             train_lexicon = train_lexicon.to(device)
             train_stance = train_stance.to(device)
@@ -211,13 +231,14 @@ def main():
                 stance_weight=stance_weight,
                 sentiment_weight=sentiment_weight,
                 stance_loss_weight=config.stance_loss_weight,
-                lexicon_loss_weight=config.lexicon_loss_weight)
+                lexicon_loss_weight=config.lexicon_loss_weight,
+                ignore_label=config.ignore_label)
 
             # backward pass
             batch_loss.backward()
 
             # prevent gradient boosting or vanishing
-            if config.clip_grad_value != 0:
+            if config.clip_grad_value != 0.0:
                 torch.nn.utils.clip_grad_value_(model.parameters(),
                                                 config.clip_grad_value)
 
@@ -225,7 +246,7 @@ def main():
             optimizer.step()
 
             # apply scheduler
-            if float(config.lr_decay) != 1:
+            if float(config.lr_decay) != 1.0:
                 scheduler.step()
 
         # evaluate model
@@ -264,7 +285,6 @@ def main():
               f'valid micro f1: {round(valid_micro_f1, 5)}')
 
         if (best_valid_loss is None) or \
-            (valid_total_loss < best_valid_loss) or \
             (valid_micro_f1 > best_valid_f1):
             best_train_loss = train_total_loss
             best_train_f1 = train_micro_f1

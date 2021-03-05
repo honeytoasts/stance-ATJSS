@@ -93,6 +93,9 @@ def parse_args():
     parser.add_argument('--lexicon_loss_weight',
                         default=0.025,
                         type=float)
+    parser.add_argument('--ignore_label',
+                        default=0,
+                        type=int)
 
     # other
     parser.add_argument('--random_seed',

@@ -96,7 +96,8 @@ def main():
         collate_fn=util.data.Dataset.collate_fn)
 
     # load model
-    model = util.model.BaseModel(config=config,
+    model = util.model.BaseModel(device=device,
+                                 config=config,
                                  num_embeddings=embedding.get_num_embeddings(),
                                  padding_idx=tokenizer.pad_token_id,
                                  embedding_weight=embedding.vector)

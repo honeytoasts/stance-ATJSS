@@ -4,9 +4,12 @@ from torch import nn
 from torch.nn import functional as F
 
 class BaseModel(torch.nn.Module):
-    def __init__(self, config, num_embeddings,
+    def __init__(self, device, config, num_embeddings,
                  padding_idx, embedding_weight=None):
         super(BaseModel, self).__init__()
+
+        # device
+        self.device = device
 
         # config
         self.config = config
@@ -30,9 +33,25 @@ class BaseModel(torch.nn.Module):
         # linear layer for sentiment
         self.sentiment_linear = SentimentLinear(config)
 
+        self.rnn_dp = nn.Dropout(p=config.rnn_dropout)
+
     def forward(self, batch_target, batch_claim):
+        # get target embedding
+        batch_target = [[self.embedding_layer.weight[id] for id in ids]
+                        for ids in batch_target]
+
+        # get average of target embedding
+        temp = []
+        for target in batch_target:
+            sum_embedding = 0.0
+            for embedding in target:
+                sum_embedding += embedding
+            temp.append((sum_embedding/len(target)).unsqueeze(0))
+        
+        batch_target = torch.cat(temp, dim=0).to(self.device)
+
         # embedding layer
-        batch_claim = self.embedding_layer(batch_claim)
+        batch_claim = self.rnn_dp(self.embedding_layer(batch_claim))
 
         # stance attn
         stance_r, stance_weight = self.stance_attn(batch_target, batch_claim)
@@ -42,11 +61,9 @@ class BaseModel(torch.nn.Module):
 
         # stance linear and softmax
         stance_r = self.stance_linear(stance_r, sentiment_r)
-        stance_r = torch.softmax(stance_r, dim=1)
 
         # sentiment linear and softmax
         sentiment_r = self.sentiment_linear(sentiment_r)
-        sentiment_r = torch.softmax(sentiment_r, dim=1)
 
         return stance_r, sentiment_r, stance_weight, sentiment_weight
 
@@ -78,35 +95,23 @@ class StanceAttn(torch.nn.Module):
                                   out_features=2*config.hidden_dim,
                                   bias=False)
 
-    def forward(self, batch_target, batch_claim):
-        # get batch sequence length
-        seq_len = batch_claim.shape[1]
+        # linear layer for v_s^T
+        self.v_linear = nn.Linear(in_features=2*config.hidden_dim,
+                                  out_features=1,
+                                  bias=False)
 
+    def forward(self, batch_target, batch_claim):
         # get all hidden vector
         claim_ht, _ = self.LSTM(batch_claim)  # (B, S, H)
 
-        # get final hidden vector
-        final_claim_ht = claim_ht[:, -1]  # (B, H)
-        final_claim_ht = final_claim_ht.repeat_interleave(
-            seq_len, 0)  # (BxS, H)
-        final_claim_ht = final_claim_ht.reshape(
-            -1, seq_len, final_claim_ht.shape[1])  # (B, S, H)
-
-        # get target embedding
-        target_embedding = batch_target.repeat_interleave(
-            seq_len, 0)  # (BxS, H)
-        target_embedding = target_embedding.reshape(
-            -1, seq_len, target_embedding.shape[1])  # (B, S, H)
-
         # get attention vector e
-        e = torch.tanh(self.t_linear(target_embedding) + \
+        e = torch.tanh(self.t_linear(batch_target).unsqueeze(1) + # (B, 1, H)
                        self.h_linear(claim_ht))  # (B, S, H)
-        e = torch.matmul(final_claim_ht.unsqueeze(3).transpose(2, 3),
-                         e.unsqueeze(3))  # (B, S, 1, 1)
-        e = e.reshape(-1, seq_len)  # (B, S)
+
+        e = self.v_linear(e).squeeze(dim=2)  # (B, S)
 
         # apply softmax to get attention score
-        weight = torch.softmax(e, dim=1)  # (B, S)
+        weight = torch.nn.functional.softmax(e, dim=1)  # (B, S)
 
         # get final vector representation
         r = torch.matmul(weight.unsqueeze(1), claim_ht).squeeze(1)  # (B, H)
@@ -141,29 +146,26 @@ class SentimentAttn(torch.nn.Module):
                                   out_features=2*config.hidden_dim,
                                   bias=False)
 
-    def forward(self, batch_claim):
-        # get batch sequence length
-        seq_len = batch_claim.shape[1]
+        # linear layer for v_t^T
+        self.v_linear = nn.Linear(in_features=2*config.hidden_dim,
+                                  out_features=1,
+                                  bias=False)
 
+    def forward(self, batch_claim):
         # get all hidden vector
         claim_ht, _ = self.LSTM(batch_claim)  # (B, S, H)
 
         # get final hidden vector
         final_claim_ht = claim_ht[:, -1]  # (B, H)
-        final_claim_ht = final_claim_ht.repeat_interleave(
-            seq_len, 0)  # (BxS, H)
-        final_claim_ht = final_claim_ht.reshape(
-            -1, seq_len, final_claim_ht.shape[1])  # (B, S, H)
 
         # get attention vector e
-        e = torch.tanh(self.s_linear(final_claim_ht) + \
+        e = torch.tanh(self.s_linear(final_claim_ht).unsqueeze(1) + # (B, 1, H)
                        self.h_linear(claim_ht))  # (B, S, H)
-        e = torch.matmul(final_claim_ht.unsqueeze(3).transpose(2, 3),
-                         e.unsqueeze(3))  # (B, S, 1, 1)
-        e = e.reshape(-1, seq_len)  # (B, S)
+
+        e = self.v_linear(e).squeeze(dim=2)  # (B, S)
 
         # apply softmax to get attention score
-        weight = torch.softmax(e, dim=1)  # (B, S)
+        weight = torch.nn.functional.softmax(e, dim=1)  # (B, S)
 
         # get final vector representation
         r = torch.matmul(weight.unsqueeze(1), claim_ht).squeeze(1)  # (B, H)
@@ -174,25 +176,15 @@ class StanceLinear(torch.nn.Module):
     def __init__(self, config):
         super(StanceLinear, self).__init__()
 
-        # config
-        self.config = config
-
-        # linear layer
-        linear = [nn.Linear(in_features=4*config.hidden_dim,
-                            out_features=config.stance_linear_dim)]
-
-        for _ in range(config.num_linear_layers-2):
-            linear.append(nn.ReLU())
-            linear.append(nn.Dropout(config.linear_dropout))
-            linear.append(nn.Linear(in_features=config.stance_linear_dim,
-                                    out_features=config.stance_linear_dim))
-
-        linear.append(nn.ReLU())
-        linear.append(nn.Dropout(config.linear_dropout))
-        linear.append(nn.Linear(in_features=config.stance_linear_dim,
-                                out_features=config.stance_output_dim))
-
-        self.linear = nn.Sequential(*linear)
+        self.linear = nn.Sequential(
+            # nn.Dropout(p=config.linear_dropout),
+            nn.Linear(in_features=4*config.hidden_dim,
+                      out_features=config.stance_linear_dim),
+            nn.ReLU(),
+            nn.Dropout(p=config.linear_dropout),
+            nn.Linear(in_features=config.stance_linear_dim,
+                      out_features=config.stance_output_dim),
+        )
 
     def forward(self, stance_r, sentiment_r):
         stance_r = torch.cat((sentiment_r, stance_r), dim=1)
@@ -203,26 +195,15 @@ class StanceLinear(torch.nn.Module):
 class SentimentLinear(torch.nn.Module):
     def __init__(self, config):
         super(SentimentLinear, self).__init__()
-
-        # config
-        self.config = config
-
-        # linear layer
-        linear = [nn.Linear(in_features=2*config.hidden_dim,
-                            out_features=config.sentiment_linear_dim)]
-
-        for _ in range(config.num_linear_layers-2):
-            linear.append(nn.ReLU())
-            linear.append(nn.Dropout(config.linear_dropout))
-            linear.append(nn.Linear(in_features=config.sentiment_linear_dim,
-                                    out_features=config.sentiment_linear_dim))
-
-        linear.append(nn.ReLU())
-        linear.append(nn.Dropout(config.linear_dropout))
-        linear.append(nn.Linear(in_features=config.sentiment_linear_dim,
-                                out_features=config.sentiment_output_dim))
-
-        self.linear = nn.Sequential(*linear)
+        self.linear = nn.Sequential(
+            # nn.Dropout(p=config.linear_dropout),
+            nn.Linear(in_features=2*config.hidden_dim,
+                        out_features=config.sentiment_linear_dim),
+            nn.ReLU(),
+            nn.Dropout(p=config.linear_dropout),
+            nn.Linear(in_features=config.sentiment_linear_dim,
+                        out_features=config.sentiment_output_dim),
+        )
 
     def forward(self, sentiment_r):
         sentiment_r = self.linear(sentiment_r)

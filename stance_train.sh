@@ -1,11 +1,11 @@
 python stance_train.py \
-    --experiment_no 1 \
+    --experiment_no 31 \
     --tokenizer TweetTokenizer \
-    --filter punctonly \
-    --min_count 1 \
-    --max_seq_len 20 \
+    --filter none \
+    --min_count 10 \
+    --max_seq_len 50 \
     --dataset semeval2016 \
-    --lexicon emolex_sentiment \
+    --lexicon opinion_lexicon \
     --stance_output_dim 3 \
     --sentiment_output_dim 3 \
     --embedding_dim 300 \
@@ -13,17 +13,17 @@ python stance_train.py \
     --stance_linear_dim 100 \
     --sentiment_linear_dim 50 \
     --num_rnn_layers 2 \
-    --num_linear_layers 2 \
+    --num_linear_layers 1 \
     --rnn_dropout 0.2 \
     --linear_dropout 0.5 \
-    --learning_rate 1e-3 \
-    --weight_decay 1e-8 \
-    --clip_grad_value 0 \
+    --learning_rate 1e-4 \
+    --weight_decay 1e-4 \
+    --clip_grad_value 1.0 \
     --lr_decay_step 10 \
     --lr_decay 1 \
     --stance_loss_weight 0.7 \
     --lexicon_loss_weight 0.025 \
     --random_seed 7 \
     --test_size 0.15 \
-    --epoch 50 \
-    --batch_size 16
+    --epoch 100 \
+    --batch_size 128
